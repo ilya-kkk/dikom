@@ -1,0 +1,21 @@
+version: "3.9"
+
+services:
+  ros2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/workspace/src/dikom:rw
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ${XAUTHORITY:-/home/user/.Xauthority}:/root/.Xauthority:ro
+    environment:
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+      - XAUTHORITY=/root/.Xauthority
+      - LIBGL_ALWAYS_SOFTWARE=1
+      - GALLIUM_DRIVER=llvmpipe
+    stdin_open: true
+    tty: true
+    working_dir: /workspace
+    command: ["ros2", "launch", "amr", "full_simulation.launch.py"]

@@ -1,0 +1,11 @@
+# Request
+float64 leg_width          # Ширина ножки стеллажа
+float64 leg_spacing        # Расстояние между ножками стеллажа
+float64 entry_depth        # Глубина заезда (расстояние от центра между ножками до целевой позиции)
+
+---
+# Response
+geometry_msgs/PoseStamped target_pose  # Целевая поза для навигации (в odom frame)
+bool success                            # Успешность поиска стеллажа
+string message                           # Сообщение об ошибке или статусе
+

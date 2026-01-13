@@ -1,14 +1,22 @@
-cmake_minimum_required(VERSION 2.8.3)
+cmake_minimum_required(VERSION 3.5)
 
-project(Сборка1)
+project(amr)
 
-find_package(catkin REQUIRED)
+find_package(ament_cmake REQUIRED)
+find_package(rosidl_default_generators REQUIRED)
 
-catkin_package()
+rosidl_generate_interfaces(${PROJECT_NAME}
+  "srv/FindRack.srv"
+  DEPENDENCIES geometry_msgs
+)
 
-find_package(roslaunch)
+install(DIRECTORY config launch meshes urdf textures
+  DESTINATION share/${PROJECT_NAME}
+)
 
-foreach(dir config launch meshes urdf)
-	install(DIRECTORY ${dir}/
-		DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/${dir})
-endforeach(dir)
+install(PROGRAMS
+  src/test.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+ament_package()
