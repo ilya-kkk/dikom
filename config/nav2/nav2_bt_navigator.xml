@@ -1,0 +1,20 @@
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <PipelineSequence name="NavigateWithReplanning">
+      <RateController hz="1.0">
+        <RecoveryNode number_of_retries="6" name="ComputePathToPose">
+          <PipelineSequence name="ComputePathToPose">
+            <PlannerSelector>
+              <ComputePathToPose goal="{goal}" path="{path}" planner_id="GridBased" />
+            </PlannerSelector>
+            <PathLongerOnApproach path="{path}" length="1.0" />
+          </PipelineSequence>
+        </RecoveryNode>
+      </RateController>
+      <RecoveryNode number_of_retries="1" name="FollowPath">
+        <FollowPath path="{path}" controller_id="FollowPath" />
+      </RecoveryNode>
+    </PipelineSequence>
+  </BehaviorTree>
+</root>
+

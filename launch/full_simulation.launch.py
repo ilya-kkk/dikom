@@ -86,6 +86,113 @@ def generate_launch_description() -> LaunchDescription:
         ],
     )
 
+    # Nav2 parameters
+    nav2_params = str(package_share / "config" / "nav2" / "nav2_params.yaml")
+    nav2_bt_navigator = str(package_share / "config" / "nav2" / "nav2_bt_navigator.xml")
+    slam_params = str(package_share / "config" / "nav2" / "slam_toolbox_params.yaml")
+
+    # SLAM Toolbox
+    slam_toolbox = Node(
+        package="slam_toolbox",
+        executable="async_slam_toolbox_node",
+        name="slam_toolbox",
+        output="screen",
+        parameters=[slam_params],
+    )
+
+    # Nav2 Map Server (для публикации карты из SLAM)
+    map_server = Node(
+        package="nav2_map_server",
+        executable="map_server",
+        name="map_server",
+        output="screen",
+        parameters=[
+            {"use_sim_time": True},
+            {"topic_name": "map"},
+            {"frame_id": "map"},
+        ],
+    )
+
+    # Nav2 Lifecycle Manager
+    lifecycle_nodes = [
+        "map_server",
+        "controller_server",
+        "planner_server",
+        "behavior_server",
+        "bt_navigator",
+        "waypoint_follower",
+        "velocity_smoother",
+    ]
+
+    nav2_lifecycle_manager = Node(
+        package="nav2_lifecycle_manager",
+        executable="lifecycle_manager",
+        name="lifecycle_manager_navigation",
+        output="screen",
+        parameters=[
+            {"use_sim_time": True},
+            {"autostart": True},
+            {"node_names": lifecycle_nodes},
+        ],
+    )
+
+    # Nav2 Controller Server
+    controller_server = Node(
+        package="nav2_controller",
+        executable="controller_server",
+        name="controller_server",
+        output="screen",
+        parameters=[nav2_params],
+    )
+
+    # Nav2 Planner Server
+    planner_server = Node(
+        package="nav2_planner",
+        executable="planner_server",
+        name="planner_server",
+        output="screen",
+        parameters=[nav2_params],
+    )
+
+    # Nav2 Behavior Server
+    behavior_server = Node(
+        package="nav2_behaviors",
+        executable="behavior_server",
+        name="behavior_server",
+        output="screen",
+        parameters=[nav2_params],
+    )
+
+    # Nav2 BT Navigator
+    bt_navigator = Node(
+        package="nav2_bt_navigator",
+        executable="bt_navigator",
+        name="bt_navigator",
+        output="screen",
+        parameters=[
+            nav2_params,
+            {"default_nav_to_pose_bt_xml": nav2_bt_navigator},
+        ],
+    )
+
+    # Nav2 Waypoint Follower
+    waypoint_follower = Node(
+        package="nav2_waypoint_follower",
+        executable="waypoint_follower",
+        name="waypoint_follower",
+        output="screen",
+        parameters=[nav2_params],
+    )
+
+    # Nav2 Velocity Smoother
+    velocity_smoother = Node(
+        package="nav2_velocity_smoother",
+        executable="velocity_smoother",
+        name="velocity_smoother",
+        output="screen",
+        parameters=[nav2_params],
+    )
+
     # Fake calibration (if needed)
     fake_calibration = ExecuteProcess(
         cmd=[
@@ -111,6 +218,15 @@ def generate_launch_description() -> LaunchDescription:
             robot_state_publisher,
             rviz,
             rack_finder_service,
+            slam_toolbox,
+            map_server,
+            controller_server,
+            planner_server,
+            behavior_server,
+            bt_navigator,
+            waypoint_follower,
+            velocity_smoother,
+            nav2_lifecycle_manager,
             fake_calibration,
         ]
     )
