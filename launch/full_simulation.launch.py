@@ -44,7 +44,7 @@ def generate_launch_description() -> LaunchDescription:
         )
     )
 
-    # Static transform
+    # Static transform base_link -> base_footprint
     static_tf = Node(
         package="tf2_ros",
         executable="static_transform_publisher",
@@ -100,22 +100,9 @@ def generate_launch_description() -> LaunchDescription:
         parameters=[slam_params],
     )
 
-    # Nav2 Map Server (для публикации карты из SLAM)
-    map_server = Node(
-        package="nav2_map_server",
-        executable="map_server",
-        name="map_server",
-        output="screen",
-        parameters=[
-            {"use_sim_time": True},
-            {"topic_name": "map"},
-            {"frame_id": "map"},
-        ],
-    )
-
     # Nav2 Lifecycle Manager
+    # Примечание: map_server не нужен при использовании SLAM, так как SLAM сам публикует карту
     lifecycle_nodes = [
-        "map_server",
         "controller_server",
         "planner_server",
         "behavior_server",
@@ -219,7 +206,6 @@ def generate_launch_description() -> LaunchDescription:
             rviz,
             rack_finder_service,
             slam_toolbox,
-            map_server,
             controller_server,
             planner_server,
             behavior_server,
