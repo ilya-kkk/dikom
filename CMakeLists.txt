@@ -11,7 +11,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   DEPENDENCIES geometry_msgs
 )
 
-install(DIRECTORY config launch meshes urdf textures
+install(DIRECTORY config launch meshes urdf
   DESTINATION share/${PROJECT_NAME}
 )
 

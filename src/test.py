@@ -5,17 +5,21 @@ from typing import List, Tuple, Optional
 
 import rclpy
 from geometry_msgs.msg import Pose, PoseStamped
+from nav2_msgs.action import NavigateToPose
+from rclpy.action import ActionClient
+from rclpy.duration import Duration
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import LaserScan
 from tf2_geometry_msgs import do_transform_pose
 from tf2_ros import Buffer, TransformListener
 
-# Импорт сгенерированного сервиса
+# Импорт сервиса
 from amr.srv import FindRack
 
 
 class LegDetector:
+    # Заменяет некорректные/бесконечные значения дальности на range_max.
     def normalize_ranges(self, ranges: List[float], range_max: float) -> List[float]:
         data = []
         for r in ranges:
@@ -25,6 +29,7 @@ class LegDetector:
                 data.append(r)
         return data
 
+    # Считает разность между соседними лучами лидара.
     def compute_diff(self, ranges: List[float]) -> List[float]:
         if not ranges:
             return []
@@ -35,6 +40,7 @@ class LegDetector:
     def find_leg_edges_from_diff(
         self, diff: List[float], threshold: float, max_width_rays: int = 30
     ) -> List[Tuple[int, int]]:
+        # Находит пары индексов (start, end), где по скачкам дальности видны ножки.
         legs = []
         n = len(diff)
 
@@ -67,10 +73,7 @@ class LegDetector:
         angle_min: float,
         angle_increment: float,
     ) -> List[Tuple[float, float]]:
-        """
-        edges: [(start_idx, end_idx), ...]
-        Возвращает список (x, y)
-        """
+        # Переводит края ножек в их центры в плоскости (x, y) лидара.
         centers = []
 
         for start, end in edges:
@@ -103,6 +106,7 @@ class LegDetector:
         max_width_rays: int,
         max_legs: int,
     ) -> List[Tuple[float, float]]:
+        # Полный пайплайн: нормализация, diff, поиск ножек и их центров.
         normalized = self.normalize_ranges(ranges, range_max)
         diff = self.compute_diff(normalized)
         edges = self.find_leg_edges_from_diff(
@@ -123,7 +127,7 @@ class LegDetector:
         angle_min: float,
         angle_increment: float,
     ) -> float:
-        """Вычисляет ширину ножки в метрах"""
+        # Вычисляет ширину ножки в метрах.
         r1 = ranges[start_idx]
         r2 = ranges[end_idx]
         theta1 = angle_min + start_idx * angle_increment
@@ -145,38 +149,60 @@ class LegDetector:
         diff_threshold: float,
         max_width_rays: int,
     ) -> List[Tuple[int, int]]:
-        """Возвращает список (start_idx, end_idx) для каждой ножки"""
+        # Возвращает список (start_idx, end_idx) для каждой найденной ножки.
         normalized = self.normalize_ranges(ranges, range_max)
         diff = self.compute_diff(normalized)
         return self.find_leg_edges_from_diff(diff, diff_threshold, max_width_rays)
 
 
-class RackFinderService:
-    def __init__(self, node: Node):
-        self._node = node
+class RackFinderNode(Node):
+    # ROS2-нода, которая по данным лидара ищет стеллаж и отправляет Nav2 goal.
+
+    # Инициализирует ноду, параметры, подписки, TF и сервис.
+    def __init__(self) -> None:
+        super().__init__("rack_finder_service")
+
         self._detector = LegDetector()
         self._last_scan: Optional[LaserScan] = None
         self._tf_buffer = Buffer()
-        self._tf_listener = TransformListener(self._tf_buffer, node)
+        self._tf_listener = TransformListener(self._tf_buffer, self)
+
+        # Action-клиент Nav2 для отправки цели навигации
+        self._nav_to_pose_client = ActionClient(
+            self, NavigateToPose, "navigate_to_pose"
+        )
 
         # Параметры детекции
-        node.declare_parameter("scan_topic", "scan")
-        node.declare_parameter("diff_threshold", 0.15)
-        node.declare_parameter("max_width_rays", 30)
-        node.declare_parameter("max_legs", 6)
-        node.declare_parameter("range_max", 0.0)
+        self.declare_parameter("scan_topic", "scan")
+        self.declare_parameter("diff_threshold", 0.15)
+        self.declare_parameter("max_width_rays", 30)
+        self.declare_parameter("max_legs", 6)
+        self.declare_parameter("range_max", 0.0)
 
         # Подписка на LaserScan для сохранения последнего сообщения
-        scan_topic = node.get_parameter("scan_topic").get_parameter_value().string_value
-        node.create_subscription(
+        scan_topic = (
+            self.get_parameter("scan_topic")
+            .get_parameter_value()
+            .string_value
+        )
+        self.create_subscription(
             LaserScan,
             scan_topic,
             self._on_scan,
             qos_profile_sensor_data,
         )
 
+        # Сервис поиска стеллажа
+        self.create_service(
+            FindRack,
+            "find_rack",
+            self._handle_find_rack,
+        )
+
+        self.get_logger().info("Rack finder node is ready")
+
+    # Callback лидара: просто сохраняет последнее сообщение LaserScan.
     def _on_scan(self, msg: LaserScan) -> None:
-        """Сохраняет последнее LaserScan сообщение"""
         self._last_scan = msg
 
     def _find_leg_pair(
@@ -189,10 +215,7 @@ class RackFinderService:
         leg_width: float,
         leg_spacing: float,
     ) -> Optional[Tuple[Tuple[float, float], Tuple[float, float]]]:
-        """
-        Находит пару ножек, соответствующую параметрам стеллажа.
-        Возвращает ((x1, y1), (x2, y2)) или None
-        """
+        # По наборам ножек ищет пару, подходящую под ширину и шаг стеллажа.
         num_legs = len(leg_centers)
         if num_legs < 2:
             return None
@@ -375,11 +398,10 @@ class RackFinderService:
 
         return pose
 
-    def handle_find_rack(
+    def _handle_find_rack(
         self, request: FindRack.Request, response: FindRack.Response
     ) -> FindRack.Response:
-        """Обработчик сервиса поиска стеллажа"""
-        # Проверяем наличие последнего LaserScan
+        # Сервис: найти стеллаж, вычислить целевую позу и отправить Nav2 goal.
         if self._last_scan is None:
             response.success = False
             response.message = "No LaserScan data available"
@@ -387,52 +409,19 @@ class RackFinderService:
 
         scan = self._last_scan
 
-        # Получаем параметры детекции
-        diff_threshold = (
-            self._node.get_parameter("diff_threshold")
-            .get_parameter_value()
-            .double_value
-        )
-        max_width_rays = (
-            self._node.get_parameter("max_width_rays")
-            .get_parameter_value()
-            .integer_value
-        )
-        max_legs = (
-            self._node.get_parameter("max_legs").get_parameter_value().integer_value
-        )
-        range_max_override = (
-            self._node.get_parameter("range_max").get_parameter_value().double_value
+        diff_threshold, max_width_rays, max_legs, range_max = (
+            self._get_detection_params(scan)
         )
 
-        range_max = (
-            range_max_override if range_max_override > 0.0 else scan.range_max
+        leg_centers, leg_edges = self._detect_legs(
+            scan, diff_threshold, max_width_rays, max_legs
         )
-
-        # Детектируем ножки
-        leg_edges = self._detector.get_leg_edges(
-            scan.ranges,
-            scan.angle_min,
-            scan.angle_increment,
-            range_max,
-            diff_threshold,
-            max_width_rays,
-        )
-
-        leg_centers = self._detector.leg_center_xy_simple(
-            scan.ranges, leg_edges, scan.angle_min, scan.angle_increment
-        )
-
-        if max_legs > 0:
-            leg_centers = leg_centers[:max_legs]
-            leg_edges = leg_edges[:max_legs]
 
         if len(leg_centers) < 2:
             response.success = False
             response.message = f"Not enough legs detected: {len(leg_centers)}"
             return response
 
-        # Ищем пару ножек
         leg_pair = self._find_leg_pair(
             leg_centers,
             leg_edges,
@@ -448,52 +437,118 @@ class RackFinderService:
             response.message = "No leg pair found matching the specified parameters"
             return response
 
-        # Вычисляем целевую позу
         target_pose = self._calculate_target_pose(
             leg_pair[0], leg_pair[1], request.entry_depth
         )
 
-        # Преобразуем из lidar frame в odom frame
-        try:
-            # Создаем PoseStamped в frame лидара
-            pose_stamped_lidar = PoseStamped()
-            pose_stamped_lidar.header.stamp = scan.header.stamp
-            pose_stamped_lidar.header.frame_id = scan.header.frame_id
-            pose_stamped_lidar.pose = target_pose
+        # Формируем цель прямо в фрейме лидара (Nav2 сам использует TF)
+        pose_stamped_lidar = PoseStamped()
+        pose_stamped_lidar.header.stamp = scan.header.stamp
+        pose_stamped_lidar.header.frame_id = scan.header.frame_id
+        pose_stamped_lidar.pose = target_pose
 
-            # Получаем трансформацию
-            transform = self._tf_buffer.lookup_transform(
-                "odom", scan.header.frame_id, scan.header.stamp, timeout=rclpy.duration.Duration(seconds=1.0)
+        nav_ok, nav_message = self._send_nav2_goal(pose_stamped_lidar)
+        if not nav_ok:
+            response.success = False
+            response.message = nav_message
+            return response
+
+        response.target_pose = pose_stamped_lidar
+        response.success = True
+        response.message = (
+            "Rack found, target pose calculated and navigation goal sent"
+        )
+        return response
+
+    def _get_detection_params(
+        self, scan: LaserScan
+    ) -> Tuple[float, int, int, float]:
+        # Считывает параметры детекции из параметров ноды.
+        diff_threshold = (
+            self.get_parameter("diff_threshold")
+            .get_parameter_value()
+            .double_value
+        )
+        max_width_rays = (
+            self.get_parameter("max_width_rays")
+            .get_parameter_value()
+            .integer_value
+        )
+        max_legs = (
+            self.get_parameter("max_legs")
+            .get_parameter_value()
+            .integer_value
+        )
+        range_max_override = (
+            self.get_parameter("range_max")
+            .get_parameter_value()
+            .double_value
+        )
+        range_max = (
+            range_max_override if range_max_override > 0.0 else scan.range_max
+        )
+        return diff_threshold, max_width_rays, max_legs, range_max
+
+    def _detect_legs(
+        self,
+        scan: LaserScan,
+        diff_threshold: float,
+        max_width_rays: int,
+        max_legs: int,
+    ) -> Tuple[List[Tuple[float, float]], List[Tuple[int, int]]]:
+        # Детектирует ножки и возвращает их центры и индексы краёв.
+        leg_edges = self._detector.get_leg_edges(
+            scan.ranges,
+            scan.angle_min,
+            scan.angle_increment,
+            scan.range_max,
+            diff_threshold,
+            max_width_rays,
+        )
+
+        leg_centers = self._detector.leg_center_xy_simple(
+            scan.ranges, leg_edges, scan.angle_min, scan.angle_increment
+        )
+
+        if max_legs > 0:
+            leg_centers = leg_centers[:max_legs]
+            leg_edges = leg_edges[:max_legs]
+
+        return leg_centers, leg_edges
+
+    def _send_nav2_goal(
+        self, pose_stamped_odom: PoseStamped
+    ) -> Tuple[bool, str]:
+        # Отправляет goal в Nav2 (NavigateToPose).
+        if not self._nav_to_pose_client.wait_for_server(timeout_sec=2.0):
+            self.get_logger().error(
+                "Nav2 NavigateToPose action server not available"
+            )
+            return False, (
+                "Target pose calculated, but NavigateToPose action server "
+                "is not available"
             )
 
-            # Преобразуем позу
-            pose_stamped_odom = do_transform_pose(pose_stamped_lidar, transform)
-            pose_stamped_odom.header.frame_id = "odom"
+        goal_msg = NavigateToPose.Goal()
+        goal_msg.pose = pose_stamped_odom
 
-            response.target_pose = pose_stamped_odom
-            response.success = True
-            response.message = "Rack found and target pose calculated"
+        send_goal_future = self._nav_to_pose_client.send_goal_async(goal_msg)
+        rclpy.spin_until_future_complete(self, send_goal_future)
+        goal_handle = send_goal_future.result()
 
-        except Exception as e:
-            self._node.get_logger().error(f"TF transform error: {str(e)}")
-            response.success = False
-            response.message = f"TF transform failed: {str(e)}"
+        if not goal_handle or not goal_handle.accepted:
+            self.get_logger().error("NavigateToPose goal was rejected")
+            return False, "Target pose calculated, but goal was rejected"
 
-        return response
+        self.get_logger().info(
+            "Rack found, target pose calculated and NavigateToPose goal sent"
+        )
+        return True, "Navigation goal sent successfully"
 
 
 def main() -> None:
     rclpy.init()
-    node = Node("rack_finder_service")
-
-    service = RackFinderService(node)
-
-    # Создаем сервис-сервер
-    srv = node.create_service(
-        FindRack, "find_rack", service.handle_find_rack
-    )
-
-    node.get_logger().info("Rack finder service is ready")
+    node = RackFinderNode()
 
     try:
         rclpy.spin(node)

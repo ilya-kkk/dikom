@@ -41,7 +41,8 @@ def generate_launch_description() -> LaunchDescription:
             PathJoinSubstitution(
                 [FindPackageShare("gazebo_ros"), "launch", "gazebo.launch.py"]
             )
-        )
+        ),
+        launch_arguments={"gui": "false"}.items(),  # headless режим, чтобы gzserver стартовал без GUI
     )
 
     # Static transform base_link -> base_footprint
@@ -85,6 +86,36 @@ def generate_launch_description() -> LaunchDescription:
             {"range_max": 0.0},
         ],
     )
+
+    # Примитивные объекты (4 параллелепипеда 0.1x0.1x0.3 по квадрату 1м, смещенному на +2м по X)
+    box_sdf = str(package_share / "config" / "objects" / "box.sdf")
+    boxes = [
+        ("box_1", 2.0, 0.0),
+        ("box_2", 3.0, 0.0),
+        ("box_3", 3.0, 1.0),
+        ("box_4", 2.0, 1.0),
+    ]
+    spawned_boxes = [
+        Node(
+            package="gazebo_ros",
+            executable="spawn_entity.py",
+            name=name,
+            output="screen",
+            arguments=[
+                "-entity",
+                name,
+                "-file",
+                box_sdf,
+                "-x",
+                str(x),
+                "-y",
+                str(y),
+                "-z",
+                "0.15",  # половина высоты 0.3м, чтобы стояло на полу
+            ],
+        )
+        for name, x, y in boxes
+    ]
 
     # Nav2 parameters
     nav2_params = str(package_share / "config" / "nav2" / "nav2_params.yaml")
@@ -205,6 +236,7 @@ def generate_launch_description() -> LaunchDescription:
             robot_state_publisher,
             rviz,
             rack_finder_service,
+            *spawned_boxes,
             slam_toolbox,
             controller_server,
             planner_server,
