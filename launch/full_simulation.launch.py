@@ -28,6 +28,8 @@ def _robot_state_publisher_setup(context, *args, **kwargs):
 def generate_launch_description() -> LaunchDescription:
     package_share = Path(get_package_share_directory("amr"))
     default_model = package_share / "urdf" / "amr.urdf"
+    box_model = package_share / "config" / "boxes" / "box.sdf"
+    ground_plane_model = package_share / "config" / "ground_plane.sdf"
     
     model_arg = DeclareLaunchArgument(
         "model",
@@ -44,7 +46,7 @@ def generate_launch_description() -> LaunchDescription:
         )
     )
 
-    # Static transform
+    # Static transform base_link -> base_footprint
     static_tf = Node(
         package="tf2_ros",
         executable="static_transform_publisher",
@@ -52,11 +54,113 @@ def generate_launch_description() -> LaunchDescription:
         output="screen",
     )
 
+    # Spawn ground plane
+    spawn_ground = Node(
+        package="gazebo_ros",
+        executable="spawn_entity.py",
+        arguments=[
+            "-file",
+            str(ground_plane_model),
+            "-entity",
+            "ground_plane",
+            "-x",
+            "0.0",
+            "-y",
+            "0.0",
+            "-z",
+            "0.0",
+        ],
+        output="screen",
+    )
+
     # Spawn robot in Gazebo
     spawn_entity = Node(
         package="gazebo_ros",
         executable="spawn_entity.py",
-        arguments=["-file", LaunchConfiguration("model"), "-entity", "amr"],
+        arguments=[
+            "-file",
+            LaunchConfiguration("model"),
+            "-entity",
+            "amr",
+            "-x",
+            "0.0",
+            "-y",
+            "0.0",
+            "-z",
+            "0.0",
+            "-Y",
+            "0.0",
+        ],
+        output="screen",
+    )
+
+    # Static obstacles: 4 boxes (0.1 x 0.1 x 0.3), square 1m side shifted +2m in X
+    box1 = Node(
+        package="gazebo_ros",
+        executable="spawn_entity.py",
+        arguments=[
+            "-file",
+            str(box_model),
+            "-entity",
+            "box1",
+            "-x",
+            "2.0",
+            "-y",
+            "0.0",
+            "-z",
+            "0.0",
+        ],
+        output="screen",
+    )
+    box2 = Node(
+        package="gazebo_ros",
+        executable="spawn_entity.py",
+        arguments=[
+            "-file",
+            str(box_model),
+            "-entity",
+            "box2",
+            "-x",
+            "3.0",
+            "-y",
+            "0.0",
+            "-z",
+            "0.0",
+        ],
+        output="screen",
+    )
+    box3 = Node(
+        package="gazebo_ros",
+        executable="spawn_entity.py",
+        arguments=[
+            "-file",
+            str(box_model),
+            "-entity",
+            "box3",
+            "-x",
+            "2.0",
+            "-y",
+            "1.0",
+            "-z",
+            "0.0",
+        ],
+        output="screen",
+    )
+    box4 = Node(
+        package="gazebo_ros",
+        executable="spawn_entity.py",
+        arguments=[
+            "-file",
+            str(box_model),
+            "-entity",
+            "box4",
+            "-x",
+            "3.0",
+            "-y",
+            "1.0",
+            "-z",
+            "0.0",
+        ],
         output="screen",
     )
 
@@ -86,32 +190,20 @@ def generate_launch_description() -> LaunchDescription:
         ],
     )
 
-    # Fake calibration (if needed)
-    fake_calibration = ExecuteProcess(
-        cmd=[
-            "ros2",
-            "topic",
-            "pub",
-            "--once",
-            "--wait-for-subscription",
-            "0",
-            "/calibrated",
-            "std_msgs/msg/Bool",
-            "{data: true}",
-        ],
-        output="screen",
-    )
-
     return LaunchDescription(
         [
             model_arg,
             gazebo,
             static_tf,
+            spawn_ground,
             spawn_entity,
+            box1,
+            box2,
+            box3,
+            box4,
             robot_state_publisher,
             rviz,
             rack_finder_service,
-            fake_calibration,
         ]
     )
 

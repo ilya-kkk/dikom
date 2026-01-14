@@ -4,13 +4,14 @@ project(amr)
 
 find_package(ament_cmake REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
+find_package(geometry_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/FindRack.srv"
   DEPENDENCIES geometry_msgs
 )
 
-install(DIRECTORY config launch meshes urdf textures
+install(DIRECTORY config launch meshes urdf
   DESTINATION share/${PROJECT_NAME}
 )
 
