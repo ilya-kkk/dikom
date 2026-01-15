@@ -4,8 +4,8 @@ from pathlib import Path
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription, OpaqueFunction
-from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, OpaqueFunction, TimerAction
+from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
@@ -28,6 +28,7 @@ def _robot_state_publisher_setup(context, *args, **kwargs):
 def generate_launch_description() -> LaunchDescription:
     package_share = Path(get_package_share_directory("amr"))
     default_model = package_share / "urdf" / "amr.urdf"
+    default_rviz = package_share / "config" / "rviz.rviz"
     box_model = package_share / "config" / "boxes" / "box.sdf"
     ground_plane_model = package_share / "config" / "ground_plane.sdf"
     
@@ -36,14 +37,37 @@ def generate_launch_description() -> LaunchDescription:
         default_value=str(default_model),
         description="Absolute path to the robot URDF file.",
     )
+    gui_arg = DeclareLaunchArgument(
+        "gui",
+        default_value="true",
+        description="Start Gazebo client GUI (gzclient). If false, runs headless (gzserver only).",
+    )
+    rviz_arg = DeclareLaunchArgument(
+        "rvizconfig",
+        default_value=str(default_rviz),
+        description="RViz config file.",
+    )
 
     # Gazebo
-    gazebo = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            PathJoinSubstitution(
-                [FindPackageShare("gazebo_ros"), "launch", "gazebo.launch.py"]
-            )
-        )
+    world_path = PathJoinSubstitution(
+        [FindPackageShare("gazebo_ros"), "worlds", "empty.world"]
+    )
+    gzserver = ExecuteProcess(
+        cmd=[
+            "gzserver",
+            "--verbose",
+            world_path,
+            "-s",
+            "libgazebo_ros_init.so",
+            "-s",
+            "libgazebo_ros_factory.so",
+        ],
+        output="screen",
+    )
+    gzclient = ExecuteProcess(
+        condition=IfCondition(LaunchConfiguration("gui")),
+        cmd=["gzclient", "--verbose"],
+        output="screen",
     )
 
     # Static transform base_link -> base_footprint
@@ -87,7 +111,7 @@ def generate_launch_description() -> LaunchDescription:
             "-y",
             "0.0",
             "-z",
-            "0.0",
+            "0.5",
             "-Y",
             "0.0",
         ],
@@ -172,6 +196,7 @@ def generate_launch_description() -> LaunchDescription:
         package="rviz2",
         executable="rviz2",
         name="rviz2",
+        arguments=["-d", LaunchConfiguration("rvizconfig")],
         output="screen",
     )
 
@@ -190,17 +215,20 @@ def generate_launch_description() -> LaunchDescription:
         ],
     )
 
+    delayed_spawns = TimerAction(
+        period=5.0,
+        actions=[spawn_ground, spawn_entity, box1, box2, box3, box4],
+    )
+
     return LaunchDescription(
         [
             model_arg,
-            gazebo,
+            gui_arg,
+            rviz_arg,
+            gzserver,
+            gzclient,
             static_tf,
-            spawn_ground,
-            spawn_entity,
-            box1,
-            box2,
-            box3,
-            box4,
+            delayed_spawns,
             robot_state_publisher,
             rviz,
             rack_finder_service,

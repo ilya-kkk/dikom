@@ -25,7 +25,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://amr/meshes/base_link.STL" />
+          filename="file:///workspace/src/dikom/meshes/base_link.STL" />
       </geometry>
       <material
         name="">
@@ -38,15 +38,11 @@
         xyz="0 0 0"
         rpy="0 0 0" />
       <geometry>
-        <box>
-          <size>0.8 0.6 0.3</size>
-        </box>
+        <mesh
+          filename="file:///workspace/src/dikom/meshes/base_link.STL" />
       </geometry>
     </collision>
   </link>
-  <gazebo reference="base_link">
-    <static>true</static>
-  </gazebo>
   <gazebo>
     <plugin name="differential_drive_controller" filename="libgazebo_ros_diff_drive.so">
       <ros>
@@ -99,7 +95,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://amr/meshes/left_wheel.STL" />
+          filename="file:///workspace/src/dikom/meshes/left_wheel.STL" />
       </geometry>
       <material
         name="">
@@ -112,10 +108,8 @@
         xyz="0 0 0"
         rpy="0 0 0" />
       <geometry>
-        <cylinder>
-          <radius>0.07</radius>
-          <length>0.05</length>
-        </cylinder>
+        <mesh
+          filename="file:///workspace/src/dikom/meshes/left_wheel.STL" />
       </geometry>
     </collision>
   </link>
@@ -154,7 +148,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://amr/meshes/right_wheel.STL" />
+          filename="file:///workspace/src/dikom/meshes/right_wheel.STL" />
       </geometry>
       <material
         name="">
@@ -167,10 +161,8 @@
         xyz="0 0 0"
         rpy="0 0 0" />
       <geometry>
-        <cylinder>
-          <radius>0.07</radius>
-          <length>0.05</length>
-        </cylinder>
+        <mesh
+          filename="file:///workspace/src/dikom/meshes/right_wheel.STL" />
       </geometry>
     </collision>
   </link>
@@ -209,7 +201,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://amr/meshes/lidar.STL" />
+          filename="file:///workspace/src/dikom/meshes/lidar.STL" />
       </geometry>
       <material
         name="">
@@ -223,14 +215,14 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://amr/meshes/lidar.STL" />
+          filename="file:///workspace/src/dikom/meshes/lidar.STL" />
       </geometry>
     </collision>
   </link>
   <gazebo reference="lidar">
     <sensor type="ray" name="lidar_sensor">
       <pose>0 0 0 0 0 0</pose>
-      <visualize>true</visualize>
+      <visualize>false</visualize>
       <update_rate>40</update_rate>
       <ray>
         <scan>

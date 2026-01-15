@@ -24,7 +24,7 @@ def _robot_state_publisher_setup(context, *args, **kwargs):
 def generate_launch_description() -> LaunchDescription:
     package_share = Path(get_package_share_directory("amr"))
     default_model = package_share / "urdf" / "amr.urdf"
-    default_rviz = package_share / "urdf.rviz"
+    default_rviz = package_share / "config" / "rviz.rviz"
 
     model_arg = DeclareLaunchArgument(
         "model",

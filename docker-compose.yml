@@ -15,6 +15,7 @@ services:
       - XAUTHORITY=/root/.Xauthority
       - LIBGL_ALWAYS_SOFTWARE=1
       - GALLIUM_DRIVER=llvmpipe
+      - GAZEBO_MODEL_PATH=/workspace/src:/usr/share/gazebo-11/models
     stdin_open: true
     tty: true
     working_dir: /workspace

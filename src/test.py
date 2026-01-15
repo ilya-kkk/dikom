@@ -213,8 +213,8 @@ class RackFinderNode(Node):
             return None
 
         # Допуски
-        width_tolerance = leg_width * 0.2  # ±20%
-        spacing_tolerance = leg_spacing * 0.1  # ±10%
+        width_tolerance = leg_width * 0.4  # ±20%
+        spacing_tolerance = leg_spacing * 0.2  # ±10%
 
         best_pair = None
         best_score = float("inf")
@@ -408,6 +408,37 @@ class RackFinderNode(Node):
         leg_centers, leg_edges = self._detect_legs(
             scan, diff_threshold, max_width_rays, max_legs
         )
+
+        leg_widths = [
+            self._detector.compute_leg_width(
+                leg_edges[i][0],
+                leg_edges[i][1],
+                scan.ranges,
+                scan.angle_min,
+                scan.angle_increment,
+            )
+            for i in range(min(len(leg_centers), len(leg_edges)))
+        ]
+        avg_leg_width = (
+            sum(leg_widths) / len(leg_widths) if leg_widths else 0.0
+        )
+        pair_spacings = []
+        for i in range(len(leg_centers)):
+            for j in range(i + 1, len(leg_centers)):
+                leg1 = leg_centers[i]
+                leg2 = leg_centers[j]
+                spacing = math.sqrt(
+                    (leg2[0] - leg1[0]) ** 2 + (leg2[1] - leg1[1]) ** 2
+                )
+                pair_spacings.append((i, j, spacing))
+
+        self.get_logger().info(
+            f"Legs detected: {len(leg_centers)}, avg width: {avg_leg_width:.3f} m"
+        )
+        for i, j, spacing in pair_spacings:
+            self.get_logger().info(
+                f"Leg pair {i}-{j} spacing: {spacing:.3f} m"
+            )
 
         if len(leg_centers) < 2:
             response.success = False
