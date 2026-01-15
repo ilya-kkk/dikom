@@ -330,10 +330,8 @@ class RackFinderNode(Node):
                         distance2 = math.sqrt(leg2[0] ** 2 + leg2[1] ** 2)
                         avg_distance = (distance1 + distance2) / 2.0
 
-                        # Используем среднее расстояние как часть score (меньше = лучше)
-                        # Нормализуем расстояние (примерно 0.01 на метр)
-                        distance_score = avg_distance * 0.01
-                        score = spacing_error + width_error1 + width_error2 + distance_score
+                        # Используем среднее расстояние как основной критерий (меньше = лучше)
+                        score = avg_distance
 
                         if score < best_score:
                             best_score = score

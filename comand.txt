@@ -1,0 +1,3 @@
+docker exec -it <ID>  bash -lc "source /opt/ros/humble/setup.bash && source /workspace/install/setup.bash && exec bash"
+ros2 service call /find_rack amr/srv/FindRack "{leg_width: 0.1, leg_spacing: 1, entry_depth: 0.50}" 
+ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args -r cmd_vel:=/cmd_vel

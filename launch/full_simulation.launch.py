@@ -47,6 +47,11 @@ def generate_launch_description() -> LaunchDescription:
         default_value=str(default_rviz),
         description="RViz config file.",
     )
+    teleop_arg = DeclareLaunchArgument(
+        "teleop",
+        default_value="true",
+        description="Start teleop_twist_keyboard for /cmd_vel control.",
+    )
 
     # Gazebo
     world_path = PathJoinSubstitution(
@@ -200,6 +205,17 @@ def generate_launch_description() -> LaunchDescription:
         output="screen",
     )
 
+    # Teleop Twist Keyboard (publishes to /cmd_vel)
+    teleop = Node(
+        package="teleop_twist_keyboard",
+        executable="teleop_twist_keyboard",
+        name="teleop_twist_keyboard",
+        output="screen",
+        emulate_tty=True,
+        remappings=[("cmd_vel", "/cmd_vel")],
+        condition=IfCondition(LaunchConfiguration("teleop")),
+    )
+
     # Rack Finder Service node
     rack_finder_service = Node(
         package="amr",
@@ -225,12 +241,14 @@ def generate_launch_description() -> LaunchDescription:
             model_arg,
             gui_arg,
             rviz_arg,
+            teleop_arg,
             gzserver,
             gzclient,
             static_tf,
             delayed_spawns,
             robot_state_publisher,
             rviz,
+            teleop,
             rack_finder_service,
         ]
     )
