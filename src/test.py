@@ -163,6 +163,7 @@ class RackFinderNode(Node):
         self._last_scan: Optional[LaserScan] = None
         self._tf_buffer = Buffer()
         self._tf_listener = TransformListener(self._tf_buffer, self)
+        self._goal_pub = self.create_publisher(PoseStamped, "/goal_pose", 10)
 
         # Параметры детекции
         self.declare_parameter("scan_topic", "scan")
@@ -364,17 +365,17 @@ class RackFinderNode(Node):
             direction_x = 1.0
             direction_y = 0.0
         else:
-            # Перпендикулярное направление (поворот на 90 градусов)
-            direction_x = -dy / leg_distance
-            direction_y = dx / leg_distance
+            # Перпендикулярное направление (поворот на 90 градусов) от робота
+            direction_x = dy / leg_distance
+            direction_y = -dx / leg_distance
 
         # Целевая позиция: центр + entry_depth в направлении к стеллажу
         target_x = center_x + entry_depth * direction_x
         target_y = center_y + entry_depth * direction_y
 
-        # Ориентация: перпендикулярно линии между ножками
-        # yaw = atan2(dy, dx) + π/2
-        yaw = math.atan2(dy, dx) + math.pi / 2.0
+        # Ориентация: перпендикулярно линии между ножками, в противоположную сторону
+        # yaw = atan2(dy, dx) - π/2
+        yaw = math.atan2(dy, dx) - math.pi / 2.0
 
         # Создаем Pose
         pose = Pose()
@@ -469,6 +470,9 @@ class RackFinderNode(Node):
         pose_stamped_lidar.header.stamp = scan.header.stamp
         pose_stamped_lidar.header.frame_id = scan.header.frame_id
         pose_stamped_lidar.pose = target_pose
+
+        # Публикуем целевую позу в /goal_pose
+        self._goal_pub.publish(pose_stamped_lidar)
 
         nav_ok, nav_message = self._send_nav2_goal(pose_stamped_lidar)
         if not nav_ok:
