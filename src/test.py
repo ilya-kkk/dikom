@@ -169,7 +169,7 @@ class RackFinderNode(Node):
         self.declare_parameter("scan_topic", "scan")
         self.declare_parameter("diff_threshold", 0.15)
         self.declare_parameter("max_width_rays", 30)
-        self.declare_parameter("max_legs", 6)
+        self.declare_parameter("max_legs", 8)
         self.declare_parameter("range_max", 0.0)
 
         # Подписка на LaserScan для сохранения последнего сообщения
@@ -214,11 +214,16 @@ class RackFinderNode(Node):
             return None
 
         # Допуски
-        width_tolerance = leg_width * 0.4  # ±20%
-        spacing_tolerance = leg_spacing * 0.2  # ±10%
+        width_tolerance = leg_width * 0.5
+        spacing_tolerance = leg_spacing * 0.3
 
         best_pair = None
         best_score = float("inf")
+        passed_pairs = 0
+
+        self.get_logger().debug(
+            f"Tolerances: width_tol={width_tolerance:.3f} spacing_tol={spacing_tolerance:.3f}"
+        )
 
         # Логика для разных количеств ножек
         if num_legs == 2:
@@ -291,7 +296,7 @@ class RackFinderNode(Node):
 
         elif num_legs >= 4:
             # Выбираем ближайшие две ножки к роботу
-            # Среди всех подходящих пар выбираем ту, где среднее расстояние до робота минимально
+            # Среди всех подходящих пар выбираем ту, где расстояние до центра пары минимально
             for i in range(num_legs):
                 for j in range(i + 1, num_legs):
                     leg1 = leg_centers[i]
@@ -320,22 +325,50 @@ class RackFinderNode(Node):
                     width_error1 = abs(width1 - leg_width)
                     width_error2 = abs(width2 - leg_width)
 
+                    center_x = 0.5 * (leg1[0] + leg2[0])
+                    center_y = 0.5 * (leg1[1] + leg2[1])
+                    center_distance = math.sqrt(center_x ** 2 + center_y ** 2)
+                    passes = (
+                        spacing_error <= spacing_tolerance
+                        and width_error1 <= width_tolerance
+                        and width_error2 <= width_tolerance
+                    )
+
+                    self.get_logger().debug(
+                        "Pair %d-%d: spacing=%.3f err=%.3f w1=%.3f w2=%.3f werr=%.3f "
+                        "center=(%.3f,%.3f) dist=%.3f passes=%s"
+                        % (
+                            i,
+                            j,
+                            spacing,
+                            spacing_error,
+                            width1,
+                            width2,
+                            width_error1 + width_error2,
+                            center_x,
+                            center_y,
+                            center_distance,
+                            passes,
+                        )
+                    )
+
                     if (
                         spacing_error <= spacing_tolerance
                         and width_error1 <= width_tolerance
                         and width_error2 <= width_tolerance
                     ):
-                        # Вычисляем среднее расстояние до робота для этой пары
-                        distance1 = math.sqrt(leg1[0] ** 2 + leg1[1] ** 2)
-                        distance2 = math.sqrt(leg2[0] ** 2 + leg2[1] ** 2)
-                        avg_distance = (distance1 + distance2) / 2.0
-
-                        # Используем среднее расстояние как основной критерий (меньше = лучше)
-                        score = avg_distance
+                        passed_pairs += 1
+                        # Используем расстояние до центра пары как критерий (меньше = лучше)
+                        score = center_distance
 
                         if score < best_score:
                             best_score = score
                             best_pair = (leg1, leg2)
+
+        if num_legs >= 4:
+            self.get_logger().debug(
+                f"Passed pairs: {passed_pairs}, best_score={best_score:.3f}"
+            )
 
         return best_pair
 
@@ -399,14 +432,25 @@ class RackFinderNode(Node):
             return response
 
         scan = self._last_scan
+        self.get_logger().debug(
+            f"FindRack request: leg_width={request.leg_width:.3f} "
+            f"leg_spacing={request.leg_spacing:.3f} "
+            f"entry_depth={request.entry_depth:.3f}"
+        )
 
         diff_threshold, max_width_rays, max_legs, range_max = (
             self._get_detection_params(scan)
         )
 
         leg_centers, leg_edges = self._detect_legs(
-            scan, diff_threshold, max_width_rays, max_legs
+            scan, diff_threshold, max_width_rays, max_legs, request.leg_width
         )
+        for i, (x, y) in enumerate(leg_centers):
+            r = math.sqrt(x ** 2 + y ** 2)
+            theta = math.atan2(y, x)
+            self.get_logger().debug(
+                "Leg %d: x=%.3f y=%.3f r=%.3f theta=%.3f" % (i, x, y, r, theta)
+            )
 
         leg_widths = [
             self._detector.compute_leg_width(
@@ -435,7 +479,7 @@ class RackFinderNode(Node):
             f"Legs detected: {len(leg_centers)}, avg width: {avg_leg_width:.3f} m"
         )
         for i, j, spacing in pair_spacings:
-            self.get_logger().info(
+            self.get_logger().debug(
                 f"Leg pair {i}-{j} spacing: {spacing:.3f} m"
             )
 
@@ -458,6 +502,10 @@ class RackFinderNode(Node):
             response.success = False
             response.message = "No leg pair found matching the specified parameters"
             return response
+        self.get_logger().debug(
+            "Chosen pair: (%.3f, %.3f) - (%.3f, %.3f)"
+            % (leg_pair[0][0], leg_pair[0][1], leg_pair[1][0], leg_pair[1][1])
+        )
 
         target_pose = self._calculate_target_pose(
             leg_pair[0], leg_pair[1], request.entry_depth
@@ -520,6 +568,7 @@ class RackFinderNode(Node):
         diff_threshold: float,
         max_width_rays: int,
         max_legs: int,
+        leg_width: float,
     ) -> Tuple[List[Tuple[float, float]], List[Tuple[int, int]]]:
         # Детектирует ножки и возвращает их центры и индексы краёв.
         leg_edges = self._detector.get_leg_edges(
@@ -535,9 +584,27 @@ class RackFinderNode(Node):
             scan.ranges, leg_edges, scan.angle_min, scan.angle_increment
         )
 
+        candidates = []
+        for center, edges in zip(leg_centers, leg_edges):
+            width = self._detector.compute_leg_width(
+                edges[0],
+                edges[1],
+                scan.ranges,
+                scan.angle_min,
+                scan.angle_increment,
+            )
+            if leg_width > 0.0 and width > leg_width * 2.0:
+                continue
+            r = math.sqrt(center[0] ** 2 + center[1] ** 2)
+            candidates.append((r, center, edges))
+
+        candidates.sort(key=lambda item: item[0])
+
         if max_legs > 0:
-            leg_centers = leg_centers[:max_legs]
-            leg_edges = leg_edges[:max_legs]
+            candidates = candidates[:max_legs]
+
+        leg_centers = [center for _, center, _ in candidates]
+        leg_edges = [edges for _, _, edges in candidates]
 
         return leg_centers, leg_edges
 

@@ -118,7 +118,7 @@ def generate_launch_description() -> LaunchDescription:
             "-z",
             "0.5",
             "-Y",
-            "0.0",
+            "0.7",
         ],
         output="screen",
     )
@@ -150,7 +150,7 @@ def generate_launch_description() -> LaunchDescription:
             "-entity",
             "box2",
             "-x",
-            "3.0",
+            "3.5",
             "-y",
             "0.0",
             "-z",
@@ -169,7 +169,7 @@ def generate_launch_description() -> LaunchDescription:
             "-x",
             "2.0",
             "-y",
-            "1.0",
+            "1.5",
             "-z",
             "0.0",
         ],
@@ -184,9 +184,79 @@ def generate_launch_description() -> LaunchDescription:
             "-entity",
             "box4",
             "-x",
-            "3.0",
+            "3.5",
             "-y",
-            "1.0",
+            "1.5",
+            "-z",
+            "0.0",
+        ],
+        output="screen",
+    )
+
+    # Another 4 boxes: square 0.8m side shifted +2m in Y
+    box5 = Node(
+        package="gazebo_ros",
+        executable="spawn_entity.py",
+        arguments=[
+            "-file",
+            str(box_model),
+            "-entity",
+            "box5",
+            "-x",
+            "0.0",
+            "-y",
+            "2.0",
+            "-z",
+            "0.0",
+        ],
+        output="screen",
+    )
+    box6 = Node(
+        package="gazebo_ros",
+        executable="spawn_entity.py",
+        arguments=[
+            "-file",
+            str(box_model),
+            "-entity",
+            "box6",
+            "-x",
+            "0.8",
+            "-y",
+            "2.0",
+            "-z",
+            "0.0",
+        ],
+        output="screen",
+    )
+    box7 = Node(
+        package="gazebo_ros",
+        executable="spawn_entity.py",
+        arguments=[
+            "-file",
+            str(box_model),
+            "-entity",
+            "box7",
+            "-x",
+            "0.0",
+            "-y",
+            "2.8",
+            "-z",
+            "0.0",
+        ],
+        output="screen",
+    )
+    box8 = Node(
+        package="gazebo_ros",
+        executable="spawn_entity.py",
+        arguments=[
+            "-file",
+            str(box_model),
+            "-entity",
+            "box8",
+            "-x",
+            "0.8",
+            "-y",
+            "2.8",
             "-z",
             "0.0",
         ],
@@ -222,6 +292,7 @@ def generate_launch_description() -> LaunchDescription:
         executable="test.py",
         name="rack_finder_service",
         output="screen",
+        arguments=["--ros-args", "--log-level", "rack_finder_service:=debug"],
         parameters=[
             {"scan_topic": "scan"},
             {"diff_threshold": 0.15},
@@ -233,7 +304,7 @@ def generate_launch_description() -> LaunchDescription:
 
     delayed_spawns = TimerAction(
         period=5.0,
-        actions=[spawn_ground, spawn_entity, box1, box2, box3, box4],
+        actions=[spawn_ground, spawn_entity, box1, box2, box3, box4, box5, box6, box7, box8],
     )
 
     return LaunchDescription(
