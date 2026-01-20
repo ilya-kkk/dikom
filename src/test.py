@@ -380,7 +380,7 @@ class RackFinderNode(Node):
     ) -> Pose:
         """
         Вычисляет целевую позу между двумя ножками на глубине entry_depth.
-        Ориентация перпендикулярна линии между ножками.
+        Ориентация перпендикулярна линии между ножками и направлена от робота.
         """
         # Центр между ножками
         center_x = 0.5 * (leg1[0] + leg2[0])
@@ -392,21 +392,49 @@ class RackFinderNode(Node):
         leg_distance = math.sqrt(dx ** 2 + dy ** 2)
 
         if leg_distance < 1e-6:
-            # Ножки слишком близко, используем направление по умолчанию
-            direction_x = 1.0
-            direction_y = 0.0
+            # Ножки слишком близко, используем направление от робота к центру
+            direction_x = center_x
+            direction_y = center_y
+            dir_norm = math.sqrt(direction_x ** 2 + direction_y ** 2)
+            if dir_norm > 1e-6:
+                direction_x /= dir_norm
+                direction_y /= dir_norm
+            else:
+                direction_x = 1.0
+                direction_y = 0.0
         else:
-            # Перпендикулярное направление (поворот на 90 градусов) от робота
-            direction_x = dy / leg_distance
-            direction_y = -dx / leg_distance
+            # Перпендикулярное направление (поворот на 90 градусов)
+            # Есть два варианта: (dy, -dx) и (-dy, dx)
+            # Выбираем то, которое направлено от робота
+            perp1_x = dy / leg_distance
+            perp1_y = -dx / leg_distance
+            
+            # Направление от робота (0, 0) к центру между ножками
+            to_center_x = center_x
+            to_center_y = center_y
+            center_norm = math.sqrt(to_center_x ** 2 + to_center_y ** 2)
+            if center_norm > 1e-6:
+                to_center_x /= center_norm
+                to_center_y /= center_norm
+            
+            # Скалярное произведение: если > 0, то направление совпадает с направлением от робота
+            dot_product = perp1_x * to_center_x + perp1_y * to_center_y
+            
+            if dot_product > 0:
+                # Используем первое перпендикулярное направление
+                direction_x = perp1_x
+                direction_y = perp1_y
+            else:
+                # Инвертируем направление
+                direction_x = -perp1_x
+                direction_y = -perp1_y
 
         # Целевая позиция: центр + entry_depth в направлении к стеллажу
         target_x = center_x + entry_depth * direction_x
         target_y = center_y + entry_depth * direction_y
 
-        # Ориентация: перпендикулярно линии между ножками, в противоположную сторону
-        # yaw = atan2(dy, dx) - π/2
-        yaw = math.atan2(dy, dx) - math.pi / 2.0
+        # Ориентация: направлена от робота (используем direction_x и direction_y)
+        yaw = math.atan2(direction_y, direction_x)
 
         # Создаем Pose
         pose = Pose()
